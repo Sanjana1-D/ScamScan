@@ -1,0 +1,1981 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ScamScan — APK & URL Fraud Detection</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+  import { getDatabase, ref, push, serverTimestamp, onValue } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
+
+  const firebaseConfig = {
+    apiKey: "AIzaSyA16Pn_o6qBDhBx0-U1-wOk1hIISQssh5A",
+    authDomain: "scamscan-93005.firebaseapp.com",
+    databaseURL: "https://scamscan-93005-default-rtdb.asia-southeast1.firebasedatabase.app",
+    projectId: "scamscan-93005",
+    storageBucket: "scamscan-93005.firebasestorage.app",
+    messagingSenderId: "304469160893",
+    appId: "1:304469160893:web:72f0b9f5126c855b4498d4",
+    measurementId: "G-G3NVM4T4WV"
+  };
+
+  const app = initializeApp(firebaseConfig);
+  const db = getDatabase(app);
+
+  // Expose to global scope for use in non-module scripts
+  window._firebaseDB = db;
+  window._firebaseRef = ref;
+  window._firebasePush = push;
+  window._firebaseServerTimestamp = serverTimestamp;
+  window._firebaseOnValue = onValue;
+  window._firebaseReady = true;
+  document.dispatchEvent(new Event('firebaseReady'));
+</script>
+<style>
+  :root {
+    --bg: #080c10;
+    --bg2: #0d1117;
+    --bg3: #111820;
+    --surface: #141c24;
+    --surface2: #1a2535;
+    --border: #1f2d3d;
+    --border2: #243040;
+    --accent: #00e5ff;
+    --accent2: #ff3d71;
+    --accent3: #00ff9d;
+    --warn: #ffaa00;
+    --text: #e8f0f8;
+    --text2: #8899aa;
+    --text3: #4a5a6a;
+    --font-display: 'Syne', sans-serif;
+    --font-mono: 'Space Mono', monospace;
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-display);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+  body::before {
+    content:'';
+    position:fixed; inset:0;
+    background-image:
+      linear-gradient(rgba(0,229,255,0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0,229,255,0.03) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events:none; z-index:0;
+  }
+
+  /* NAV */
+  nav {
+    position:fixed; top:0; left:0; right:0; z-index:100;
+    display:flex; align-items:center; justify-content:space-between;
+    padding:0 2.5rem; height:60px;
+    background: rgba(8,12,16,0.92);
+    backdrop-filter: blur(20px);
+    border-bottom: 1px solid var(--border);
+  }
+  .logo { display:flex; align-items:center; gap:10px; font-size:1.3rem; font-weight:800; letter-spacing:-0.02em; }
+  .logo-icon {
+    width:32px; height:32px;
+    background: linear-gradient(135deg, var(--accent), var(--accent3));
+    border-radius:8px; display:flex; align-items:center; justify-content:center; font-size:16px;
+  }
+  .logo span { color:var(--accent); }
+  .nav-links { display:flex; gap:0.25rem; }
+  .nav-btn {
+    padding:6px 14px; border-radius:6px; background:none; border:none;
+    color:var(--text2); font-family:var(--font-display); font-size:0.85rem;
+    cursor:pointer; transition:all 0.2s;
+  }
+  .nav-btn:hover, .nav-btn.active { color:var(--accent); background:rgba(0,229,255,0.08); }
+
+  /* PAGES */
+  .page { display:none; padding-top:60px; min-height:100vh; position:relative; z-index:1; }
+  .page.active { display:block; }
+
+  /* ===== HOME PAGE ===== */
+  .hero {
+    min-height: calc(100vh - 60px);
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    text-align:center; padding:2rem;
+    position:relative;
+  }
+  .hero-glow {
+    position:absolute; top:20%; left:50%; transform:translateX(-50%);
+    width:600px; height:300px;
+    background: radial-gradient(ellipse, rgba(0,229,255,0.08) 0%, transparent 70%);
+    pointer-events:none;
+  }
+  .hero-badge {
+    display:inline-flex; align-items:center; gap:8px;
+    padding:6px 14px; border-radius:999px;
+    border:1px solid rgba(0,229,255,0.25);
+    background:rgba(0,229,255,0.05);
+    font-family:var(--font-mono); font-size:0.72rem;
+    color:var(--accent); margin-bottom:2rem;
+    animation: fadeUp 0.6s ease both;
+  }
+  .badge-dot { width:6px; height:6px; border-radius:50%; background:var(--accent3); animation:pulse 2s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
+  @keyframes fadeUp { from{opacity:0;transform:translateY(20px)} to{opacity:1;transform:translateY(0)} }
+
+  .hero h1 {
+    font-size: clamp(3rem, 8vw, 6rem);
+    font-weight:800; line-height:0.95; letter-spacing:-0.04em;
+    margin-bottom:1.5rem;
+    animation: fadeUp 0.6s 0.1s ease both;
+  }
+  .hero h1 .line2 { color:var(--accent); display:block; }
+  .hero p {
+    font-size:1.1rem; color:var(--text2); max-width:520px;
+    line-height:1.7; margin-bottom:2.5rem;
+    animation: fadeUp 0.6s 0.2s ease both;
+  }
+  .hero-btns {
+    display:flex; gap:1rem; flex-wrap:wrap; justify-content:center;
+    animation: fadeUp 0.6s 0.3s ease both;
+  }
+  .btn-primary {
+    padding:14px 32px; border-radius:10px;
+    background:var(--accent); border:none;
+    color:#000; font-family:var(--font-display); font-weight:700; font-size:1rem;
+    cursor:pointer; transition:all 0.25s;
+    display:flex; align-items:center; gap:8px;
+  }
+  .btn-primary:hover { background:#33eaff; transform:translateY(-2px); box-shadow:0 8px 30px rgba(0,229,255,0.3); }
+  .btn-outline {
+    padding:14px 32px; border-radius:10px;
+    background:transparent; border:1px solid var(--border2);
+    color:var(--text); font-family:var(--font-display); font-weight:600; font-size:1rem;
+    cursor:pointer; transition:all 0.25s;
+  }
+  .btn-outline:hover { border-color:var(--accent); color:var(--accent); transform:translateY(-2px); }
+
+  /* STATS ROW */
+  .stats-row {
+    display:flex; gap:1px; margin:5rem 2rem 0;
+    background:var(--border); border:1px solid var(--border); border-radius:14px; overflow:hidden;
+    animation: fadeUp 0.6s 0.4s ease both;
+    max-width:900px; width:100%; align-self:center;
+  }
+  .stat-item {
+    flex:1; padding:1.5rem; background:var(--surface);
+    text-align:center;
+  }
+  .stat-num { font-size:2rem; font-weight:800; color:var(--accent); letter-spacing:-0.03em; font-family:var(--font-mono); }
+  .stat-label { font-size:0.78rem; color:var(--text2); margin-top:4px; }
+
+  /* HOW IT WORKS */
+  .section { padding:5rem 2rem; max-width:1100px; margin:0 auto; }
+  .section-tag { font-family:var(--font-mono); font-size:0.75rem; color:var(--accent); letter-spacing:0.1em; text-transform:uppercase; margin-bottom:1rem; }
+  .section-title { font-size:2.2rem; font-weight:800; letter-spacing:-0.03em; margin-bottom:1rem; }
+  .section-sub { color:var(--text2); font-size:1rem; line-height:1.7; max-width:500px; margin-bottom:3rem; }
+
+  .steps-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:1.5rem; }
+  .step-card {
+    background:var(--surface); border:1px solid var(--border);
+    border-radius:14px; padding:1.75rem;
+    transition:all 0.3s; position:relative; overflow:hidden;
+  }
+  .step-card::before {
+    content:''; position:absolute; top:0; left:0; right:0; height:2px;
+    background:linear-gradient(90deg, var(--accent), var(--accent3));
+    transform:scaleX(0); transform-origin:left; transition:transform 0.3s;
+  }
+  .step-card:hover { border-color:var(--border2); transform:translateY(-4px); }
+  .step-card:hover::before { transform:scaleX(1); }
+  .step-num { font-family:var(--font-mono); font-size:0.7rem; color:var(--accent); margin-bottom:1rem; }
+  .step-icon { font-size:2rem; margin-bottom:1rem; }
+  .step-card h3 { font-size:1rem; font-weight:700; margin-bottom:0.5rem; }
+  .step-card p { font-size:0.85rem; color:var(--text2); line-height:1.6; }
+
+  /* FEATURES */
+  .features-grid { display:grid; grid-template-columns:repeat(2,1fr); gap:1.5rem; }
+  .feature-card {
+    background:var(--surface); border:1px solid var(--border);
+    border-radius:14px; padding:1.75rem;
+    display:flex; gap:1.25rem; align-items:flex-start;
+    transition:border-color 0.3s;
+  }
+  .feature-card:hover { border-color:rgba(0,229,255,0.3); }
+  .feature-icon {
+    width:44px; height:44px; border-radius:10px; flex-shrink:0;
+    display:flex; align-items:center; justify-content:center; font-size:1.25rem;
+  }
+  .fi-blue { background:rgba(0,229,255,0.1); }
+  .fi-green { background:rgba(0,255,157,0.1); }
+  .fi-red { background:rgba(255,61,113,0.1); }
+  .fi-yellow { background:rgba(255,170,0,0.1); }
+  .feature-card h3 { font-size:0.95rem; font-weight:700; margin-bottom:0.4rem; }
+  .feature-card p { font-size:0.82rem; color:var(--text2); line-height:1.6; }
+
+  
+  /* SCANNER PAGE */
+  .scanner-wrap { max-width:860px; margin:0 auto; padding:3rem 2rem; }
+  .page-title { font-size:2rem; font-weight:800; letter-spacing:-0.03em; margin-bottom:0.5rem; }
+  .page-sub { color:var(--text2); font-size:0.9rem; margin-bottom:2.5rem; }
+
+  .upload-zone {
+    border:2px dashed var(--border2); border-radius:16px; padding:3.5rem 2rem;
+    text-align:center; cursor:pointer; transition:all 0.3s; background:var(--surface);
+    margin-bottom:1.5rem; position:relative;
+  }
+  .upload-zone:hover, .upload-zone.dragover { border-color:var(--accent); background:rgba(0,229,255,0.04); }
+  .upload-icon { font-size:3rem; margin-bottom:1rem; }
+  .upload-zone h3 { font-size:1.1rem; font-weight:700; margin-bottom:0.5rem; }
+  .upload-zone p { color:var(--text2); font-size:0.85rem; }
+  .upload-zone input { position:absolute; inset:0; opacity:0; cursor:pointer; }
+
+  .url-row { display:flex; gap:0.75rem; margin-bottom:2rem; }
+  .url-input {
+    flex:1; padding:12px 16px; border-radius:10px;
+    background:var(--surface); border:1px solid var(--border2);
+    color:var(--text); font-family:var(--font-display); font-size:0.9rem;
+    outline:none; transition:border-color 0.2s;
+  }
+  .url-input:focus { border-color:var(--accent); }
+  .url-input::placeholder { color:var(--text3); }
+  .scan-url-btn {
+    padding:12px 24px; border-radius:10px; background:var(--surface2); border:1px solid var(--border2);
+    color:var(--text); font-family:var(--font-display); font-weight:600; font-size:0.9rem;
+    cursor:pointer; transition:all 0.2s; white-space:nowrap;
+  }
+  .scan-url-btn:hover { border-color:var(--accent); color:var(--accent); }
+
+  .sample-row { display:flex; gap:0.5rem; flex-wrap:wrap; margin-bottom:2rem; }
+  .sample-tag {
+    padding:6px 14px; border-radius:999px; background:var(--surface); border:1px solid var(--border);
+    font-size:0.78rem; color:var(--text2); cursor:pointer; transition:all 0.2s; font-family:var(--font-mono);
+  }
+  .sample-tag:hover { border-color:var(--accent); color:var(--accent); }
+
+  /* RESULTS */
+  #results { display:none; }
+  .results-header {
+    display:flex; align-items:center; gap:1rem; margin-bottom:2rem;
+    padding-bottom:1.5rem; border-bottom:1px solid var(--border);
+  }
+  .risk-badge-big {
+    padding:8px 20px; border-radius:8px; font-family:var(--font-mono);
+    font-size:0.85rem; font-weight:700; letter-spacing:0.05em;
+  }
+  .risk-high { background:rgba(255,61,113,0.15); color:var(--accent2); border:1px solid rgba(255,61,113,0.3); }
+  .risk-medium { background:rgba(255,170,0,0.15); color:var(--warn); border:1px solid rgba(255,170,0,0.3); }
+  .risk-low { background:rgba(0,255,157,0.15); color:var(--accent3); border:1px solid rgba(0,255,157,0.3); }
+  .results-apk-name { font-size:1.1rem; font-weight:700; }
+  .results-apk-sub { font-size:0.8rem; color:var(--text2); font-family:var(--font-mono); }
+
+  .score-section { display:grid; grid-template-columns:200px 1fr; gap:1.5rem; margin-bottom:1.5rem; }
+  .score-ring-wrap {
+    background:var(--surface); border:1px solid var(--border); border-radius:14px;
+    padding:1.5rem; display:flex; flex-direction:column; align-items:center; justify-content:center;
+  }
+  .score-ring { position:relative; width:110px; height:110px; margin-bottom:0.75rem; }
+  .score-ring svg { transform:rotate(-90deg); }
+  .score-ring-num {
+    position:absolute; inset:0; display:flex; flex-direction:column;
+    align-items:center; justify-content:center;
+    font-family:var(--font-mono); font-size:1.6rem; font-weight:700;
+  }
+  .score-ring-label { font-size:0.75rem; color:var(--text2); }
+  .score-sub-label { font-size:0.75rem; color:var(--text2); text-align:center; }
+
+  .breakdown-grid { display:grid; grid-template-columns:1fr 1fr; gap:1rem; }
+  .breakdown-card { background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:1.25rem; }
+  .breakdown-card h4 { font-size:0.8rem; color:var(--text2); margin-bottom:0.75rem; font-family:var(--font-mono); }
+  .bar-item { margin-bottom:0.6rem; }
+  .bar-label { display:flex; justify-content:space-between; font-size:0.78rem; margin-bottom:4px; }
+  .bar-track { height:6px; background:var(--bg3); border-radius:3px; overflow:hidden; }
+  .bar-fill { height:100%; border-radius:3px; transition:width 1s ease; }
+  .bar-danger { background: linear-gradient(90deg, #ff3d71, #ff6b6b); }
+  .bar-warn { background: linear-gradient(90deg, #ffaa00, #ffd000); }
+  .bar-safe { background: linear-gradient(90deg, #00ff9d, #00e5ff); }
+
+  .perms-list { display:flex; flex-direction:column; gap:6px; }
+  .perm-item {
+    display:flex; align-items:center; gap:8px; padding:8px 10px;
+    border-radius:8px; background:var(--bg3); font-size:0.78rem; font-family:var(--font-mono);
+  }
+  .perm-dot { width:7px; height:7px; border-radius:50%; flex-shrink:0; }
+  .perm-danger { background:var(--accent2); }
+  .perm-warn { background:var(--warn); }
+  .perm-ok { background:var(--accent3); }
+
+  /* AI VERDICT */
+  .ai-verdict {
+    background:var(--surface); border:1px solid rgba(0,229,255,0.2);
+    border-radius:14px; padding:1.5rem; margin-top:1.5rem;
+  }
+  .ai-verdict-header { display:flex; align-items:center; gap:8px; margin-bottom:1rem; }
+  .ai-tag { font-family:var(--font-mono); font-size:0.7rem; color:var(--accent); background:rgba(0,229,255,0.1); padding:3px 8px; border-radius:4px; }
+  .ai-verdict-text { font-size:0.88rem; color:var(--text2); line-height:1.7; }
+  .ai-verdict-text strong { color:var(--text); }
+  .typing-cursor { display:inline-block; width:2px; height:14px; background:var(--accent); animation:blink 1s infinite; vertical-align:middle; margin-left:2px; }
+  @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0} }
+
+  .action-row { display:flex; gap:0.75rem; margin-top:1.5rem; flex-wrap:wrap; }
+  .action-btn {
+    padding:10px 20px; border-radius:8px; font-family:var(--font-display); font-weight:600; font-size:0.85rem;
+    cursor:pointer; transition:all 0.2s; border:1px solid var(--border2); background:var(--surface2); color:var(--text);
+    display:flex; align-items:center; gap:6px;
+  }
+  .action-btn:hover { border-color:var(--accent); color:var(--accent); }
+  .action-btn.danger { border-color:rgba(255,61,113,0.4); color:var(--accent2); background:rgba(255,61,113,0.08); }
+  .action-btn.danger:hover { background:rgba(255,61,113,0.15); }
+
+  /* LOADING */
+  #loading { display:none; text-align:center; padding:3rem; }
+  .scan-anim { margin:0 auto 1.5rem; width:80px; height:80px; position:relative; }
+  .scan-ring {
+    width:80px; height:80px; border-radius:50%;
+    border:2px solid var(--border); border-top-color:var(--accent);
+    animation:spin 1s linear infinite; position:absolute;
+  }
+  .scan-ring2 {
+    width:60px; height:60px; border-radius:50%;
+    border:2px solid var(--border); border-bottom-color:var(--accent3);
+    animation:spin 1.5s linear infinite reverse; position:absolute; top:10px; left:10px;
+  }
+  @keyframes spin { to { transform:rotate(360deg); } }
+  .scan-label { font-family:var(--font-mono); font-size:0.85rem; color:var(--accent); margin-bottom:0.5rem; }
+  .scan-steps { font-size:0.78rem; color:var(--text3); }
+
+  /* ═══════════════════════════════════════
+     RISK POPUP OVERLAY
+  ═══════════════════════════════════════ */
+  .risk-overlay {
+    position:fixed; inset:0; z-index:9999;
+    display:flex; align-items:center; justify-content:center;
+    backdrop-filter:blur(8px);
+    opacity:0; pointer-events:none;
+    transition:opacity 0.35s ease;
+  }
+  .risk-overlay.visible { opacity:1; pointer-events:all; }
+
+  /* HIGH RISK — dark crimson pulse */
+  .risk-overlay.high { background:rgba(10,2,6,0.88); }
+  /* MEDIUM RISK — deep amber haze */
+  .risk-overlay.medium { background:rgba(8,6,2,0.85); }
+  /* LOW RISK — deep teal calm */
+  .risk-overlay.low { background:rgba(2,8,6,0.82); }
+
+  .risk-popup {
+    position:relative; max-width:560px; width:90%;
+    border-radius:20px; padding:0;
+    transform:scale(0.88) translateY(30px);
+    transition:transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+    overflow:hidden;
+  }
+  .risk-overlay.visible .risk-popup { transform:scale(1) translateY(0); }
+
+  /* High Risk styling */
+  .risk-popup.high {
+    background: linear-gradient(160deg, #1a0810 0%, #0d0408 100%);
+    border:1px solid rgba(255,61,113,0.4);
+    box-shadow:0 0 60px rgba(255,61,113,0.25), 0 20px 60px rgba(0,0,0,0.8);
+  }
+  .risk-popup.high::before {
+    content:'';
+    position:absolute; top:0; left:0; right:0; height:3px;
+    background: linear-gradient(90deg, #ff3d71, #ff9a3d, #ff3d71);
+    background-size:200% 100%; animation:shimmer 2s linear infinite;
+  }
+  @keyframes shimmer { 0%{background-position:200% 0} 100%{background-position:-200% 0} }
+
+  /* Medium Risk styling */
+  .risk-popup.medium {
+    background: linear-gradient(160deg, #14100a 0%, #0c0a04 100%);
+    border:1px solid rgba(255,170,0,0.4);
+    box-shadow:0 0 60px rgba(255,170,0,0.2), 0 20px 60px rgba(0,0,0,0.8);
+  }
+  .risk-popup.medium::before {
+    content:'';
+    position:absolute; top:0; left:0; right:0; height:3px;
+    background: linear-gradient(90deg, #ffaa00, #ffe66d, #ffaa00);
+    background-size:200% 100%; animation:shimmer 2.5s linear infinite;
+  }
+
+  /* Low Risk styling */
+  .risk-popup.low {
+    background: linear-gradient(160deg, #061410 0%, #030d09 100%);
+    border:1px solid rgba(0,255,157,0.4);
+    box-shadow:0 0 60px rgba(0,255,157,0.15), 0 20px 60px rgba(0,0,0,0.8);
+  }
+  .risk-popup.low::before {
+    content:'';
+    position:absolute; top:0; left:0; right:0; height:3px;
+    background: linear-gradient(90deg, #00ff9d, #00e5ff, #00ff9d);
+    background-size:200% 100%; animation:shimmer 3s linear infinite;
+  }
+
+  .popup-inner { padding:2.5rem; }
+
+  .popup-icon-wrap {
+    display:flex; align-items:center; justify-content:center;
+    width:80px; height:80px; border-radius:50%; margin:0 auto 1.5rem;
+    position:relative;
+  }
+  .popup-icon-wrap.high {
+    background:rgba(255,61,113,0.12);
+    border:2px solid rgba(255,61,113,0.4);
+    animation:dangerPulse 1.5s ease-in-out infinite;
+  }
+  @keyframes dangerPulse {
+    0%,100%{box-shadow:0 0 0 0 rgba(255,61,113,0.4)}
+    50%{box-shadow:0 0 0 16px rgba(255,61,113,0)}
+  }
+  .popup-icon-wrap.medium {
+    background:rgba(255,170,0,0.12);
+    border:2px solid rgba(255,170,0,0.4);
+    animation:warnPulse 2s ease-in-out infinite;
+  }
+  @keyframes warnPulse {
+    0%,100%{box-shadow:0 0 0 0 rgba(255,170,0,0.35)}
+    50%{box-shadow:0 0 0 14px rgba(255,170,0,0)}
+  }
+  .popup-icon-wrap.low {
+    background:rgba(0,255,157,0.1);
+    border:2px solid rgba(0,255,157,0.35);
+  }
+
+  .popup-icon { font-size:2.5rem; }
+
+  .popup-title { text-align:center; font-size:1.5rem; font-weight:800; letter-spacing:-0.02em; margin-bottom:0.4rem; }
+  .popup-title.high { color:#ff3d71; }
+  .popup-title.medium { color:#ffaa00; }
+  .popup-title.low { color:#00ff9d; }
+
+  .popup-subtitle { text-align:center; font-size:0.85rem; color:var(--text2); margin-bottom:1.75rem; font-family:var(--font-mono); }
+
+  .popup-score-row { display:flex; align-items:center; justify-content:center; gap:1rem; margin-bottom:1.75rem; }
+  .popup-score {
+    font-size:3.5rem; font-weight:800; font-family:var(--font-mono); line-height:1;
+  }
+  .popup-score.high { color:#ff3d71; }
+  .popup-score.medium { color:#ffaa00; }
+  .popup-score.low { color:#00ff9d; }
+  .popup-score-label { font-size:0.75rem; color:var(--text3); }
+  .popup-score-label strong { display:block; font-size:1rem; color:var(--text2); }
+
+  .popup-divider { height:1px; background:var(--border); margin:0 -2.5rem 1.75rem; }
+
+  /* Reasons / Precautions list */
+  .popup-section-label {
+    font-size:0.7rem; font-family:var(--font-mono); letter-spacing:0.1em;
+    text-transform:uppercase; margin-bottom:0.75rem;
+  }
+  .popup-section-label.high { color:var(--accent2); }
+  .popup-section-label.medium { color:var(--warn); }
+  .popup-section-label.low { color:var(--accent3); }
+
+  .popup-list { display:flex; flex-direction:column; gap:0.6rem; margin-bottom:1.5rem; }
+  .popup-list-item {
+    display:flex; align-items:flex-start; gap:10px;
+    padding:10px 12px; border-radius:10px; font-size:0.83rem; line-height:1.5;
+  }
+  .popup-list-item.high { background:rgba(255,61,113,0.08); border:1px solid rgba(255,61,113,0.15); color:#f8bbc8; }
+  .popup-list-item.medium { background:rgba(255,170,0,0.08); border:1px solid rgba(255,170,0,0.15); color:#f8daa0; }
+  .popup-list-item.low { background:rgba(0,255,157,0.06); border:1px solid rgba(0,255,157,0.12); color:#a0f8d8; }
+  .popup-list-icon { flex-shrink:0; font-size:0.9rem; margin-top:1px; }
+
+  /* AI reasoning box */
+  .popup-ai-box {
+    border-radius:10px; padding:1rem 1.1rem; margin-bottom:1.5rem;
+    font-size:0.82rem; line-height:1.65; font-family:var(--font-mono);
+    min-height:60px;
+  }
+  .popup-ai-box.high { background:rgba(255,61,113,0.06); border:1px solid rgba(255,61,113,0.15); color:#d08090; }
+  .popup-ai-box.medium { background:rgba(255,170,0,0.06); border:1px solid rgba(255,170,0,0.15); color:#c09060; }
+  .popup-ai-box.low { background:rgba(0,255,157,0.05); border:1px solid rgba(0,255,157,0.15); color:#50b888; }
+  .popup-ai-label { font-size:0.68rem; letter-spacing:0.08em; opacity:0.6; margin-bottom:6px; }
+
+  /* Popup buttons */
+  .popup-btn-row { display:flex; gap:0.75rem; }
+  .popup-close-btn {
+    flex:1; padding:12px; border-radius:10px; font-family:var(--font-display); font-weight:700;
+    font-size:0.9rem; cursor:pointer; transition:all 0.2s; border:none;
+  }
+  .popup-close-btn.high { background:#ff3d71; color:#fff; }
+  .popup-close-btn.high:hover { background:#ff6b8a; }
+  .popup-close-btn.medium { background:#ffaa00; color:#000; }
+  .popup-close-btn.medium:hover { background:#ffcc44; }
+  .popup-close-btn.low { background:#00ff9d; color:#000; }
+  .popup-close-btn.low:hover { background:#33ffb3; }
+  .popup-view-btn {
+    flex:1; padding:12px; border-radius:10px; font-family:var(--font-display); font-weight:600;
+    font-size:0.9rem; cursor:pointer; transition:all 0.2s;
+    background:transparent; border:1px solid var(--border2); color:var(--text2);
+  }
+  .popup-view-btn:hover { border-color:var(--accent); color:var(--accent); }
+
+  /* Loading spinner inside popup */
+  .popup-ai-loading { display:flex; align-items:center; gap:8px; font-size:0.78rem; color:var(--text3); font-family:var(--font-mono); }
+  .mini-spin { width:14px; height:14px; border-radius:50%; border:2px solid var(--border); border-top-color:var(--accent); animation:spin 0.8s linear infinite; flex-shrink:0; }
+
+  /* REPORT MODAL */
+  .modal-overlay {
+    position:fixed; inset:0; z-index:10000;
+    background:rgba(0,0,0,0.85); backdrop-filter:blur(8px);
+    display:flex; align-items:center; justify-content:center;
+    opacity:0; pointer-events:none; transition:opacity 0.3s;
+  }
+  .modal-overlay.visible { opacity:1; pointer-events:all; }
+  .modal-box {
+    background:var(--surface); border:1px solid var(--border2); border-radius:18px;
+    padding:2rem; max-width:520px; width:90%;
+    transform:scale(0.92) translateY(20px); transition:transform 0.35s cubic-bezier(0.34,1.56,0.64,1);
+  }
+  .modal-overlay.visible .modal-box { transform:scale(1) translateY(0); }
+  .modal-title { font-size:1.2rem; font-weight:800; margin-bottom:0.4rem; display:flex; align-items:center; gap:8px; }
+  .modal-sub { font-size:0.83rem; color:var(--text2); margin-bottom:1.5rem; }
+  .modal-field { margin-bottom:1rem; }
+  .modal-label { font-size:0.75rem; font-family:var(--font-mono); color:var(--text2); margin-bottom:6px; display:block; letter-spacing:0.05em; }
+  .modal-input {
+    width:100%; padding:10px 14px; border-radius:8px;
+    background:var(--bg3); border:1px solid var(--border2); color:var(--text);
+    font-family:var(--font-display); font-size:0.88rem; outline:none; transition:border-color 0.2s;
+  }
+  .modal-input:focus { border-color:var(--accent); }
+  .modal-textarea { resize:vertical; min-height:90px; line-height:1.5; }
+  .modal-btn-row { display:flex; gap:0.75rem; margin-top:1.5rem; }
+  .modal-submit-btn {
+    flex:1; padding:11px; border-radius:9px; border:none;
+    background:var(--accent2); color:#fff; font-family:var(--font-display); font-weight:700;
+    font-size:0.9rem; cursor:pointer; transition:all 0.2s;
+  }
+  .modal-submit-btn:hover { background:#ff6b8a; }
+  .modal-submit-btn:disabled { opacity:0.6; cursor:not-allowed; }
+  .modal-cancel-btn {
+    padding:11px 20px; border-radius:9px; background:transparent;
+    border:1px solid var(--border2); color:var(--text2); font-family:var(--font-display);
+    font-weight:600; font-size:0.9rem; cursor:pointer; transition:all 0.2s;
+  }
+  .modal-cancel-btn:hover { border-color:var(--accent); color:var(--accent); }
+  .modal-select {
+    width:100%; padding:10px 14px; border-radius:8px;
+    background:var(--bg3); border:1px solid var(--border2); color:var(--text);
+    font-family:var(--font-display); font-size:0.88rem; outline:none; cursor:pointer;
+  }
+  .modal-select:focus { border-color:var(--accent); }
+
+  /* TOAST */
+  .toast {
+    position:fixed; bottom:2rem; left:50%; transform:translateX(-50%) translateY(80px);
+    background:var(--surface2); border:1px solid var(--border2); border-radius:10px;
+    padding:12px 22px; font-size:0.88rem; z-index:20000;
+    transition:transform 0.35s cubic-bezier(0.34,1.56,0.64,1); white-space:nowrap;
+    display:flex; align-items:center; gap:8px;
+  }
+  .toast.show { transform:translateX(-50%) translateY(0); }
+  .toast.success { border-color:rgba(0,255,157,0.4); color:var(--accent3); }
+  .toast.error { border-color:rgba(255,61,113,0.4); color:var(--accent2); }
+
+  /* ── COMMUNITY REPORTS SECTION ── */
+  .community-section {
+    max-width:900px; margin:0 auto; padding:4rem 2rem 5rem;
+  }
+  .section-header { text-align:center; margin-bottom:3rem; }
+  .section-tag {
+    display:inline-block; padding:5px 14px; border-radius:999px;
+    border:1px solid rgba(255,61,113,0.3); background:rgba(255,61,113,0.07);
+    font-family:var(--font-mono); font-size:0.7rem; color:var(--accent2);
+    letter-spacing:0.08em; margin-bottom:1rem;
+  }
+  .section-header h2 { font-size:2rem; font-weight:800; letter-spacing:-0.03em; margin-bottom:0.5rem; }
+  .section-header p { color:var(--text2); font-size:0.88rem; }
+  .reports-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(260px, 1fr)); gap:1rem; }
+  .report-card {
+    background:var(--surface); border:1px solid var(--border);
+    border-radius:14px; padding:1.25rem; position:relative;
+    transition:border-color 0.2s, transform 0.2s;
+  }
+  .report-card:hover { border-color:var(--border2); transform:translateY(-2px); }
+  .report-card.high { border-left:3px solid var(--accent2); }
+  .report-card.medium { border-left:3px solid var(--warn); }
+  .report-card.low { border-left:3px solid var(--accent3); }
+  .report-card-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:0.75rem; }
+  .report-risk-pill {
+    font-size:0.68rem; font-family:var(--font-mono); font-weight:700;
+    padding:3px 9px; border-radius:5px; letter-spacing:0.06em;
+  }
+  .report-risk-pill.high { background:rgba(255,61,113,0.12); color:var(--accent2); }
+  .report-risk-pill.medium { background:rgba(255,170,0,0.12); color:var(--warn); }
+  .report-risk-pill.low { background:rgba(0,255,157,0.1); color:var(--accent3); }
+  .report-score { font-family:var(--font-mono); font-size:1.1rem; font-weight:700; }
+  .report-score.high { color:var(--accent2); }
+  .report-score.medium { color:var(--warn); }
+  .report-score.low { color:var(--accent3); }
+  .report-target {
+    font-size:0.82rem; font-family:var(--font-mono); color:var(--text);
+    word-break:break-all; margin-bottom:0.6rem; line-height:1.4;
+  }
+  .report-category {
+    font-size:0.72rem; color:var(--text2); margin-bottom:0.6rem;
+    display:flex; align-items:center; gap:5px;
+  }
+  .report-finding { font-size:0.78rem; color:var(--text2); line-height:1.5; margin-bottom:0.75rem; }
+  .report-footer { display:flex; align-items:center; justify-content:space-between; }
+  .report-anon { font-size:0.7rem; color:var(--text3); font-family:var(--font-mono); display:flex; align-items:center; gap:5px; }
+  .report-anon-dot { width:6px; height:6px; border-radius:50%; background:var(--accent3); }
+  .report-date { font-size:0.68rem; color:var(--text3); font-family:var(--font-mono); }
+
+  /* ── PDF DOWNLOAD MODAL ── */
+  .pdf-modal-overlay {
+    position:fixed; inset:0; z-index:10001;
+    background:rgba(0,0,0,0.88); backdrop-filter:blur(10px);
+    display:flex; align-items:center; justify-content:center;
+    opacity:0; pointer-events:none; transition:opacity 0.3s;
+  }
+  .pdf-modal-overlay.visible { opacity:1; pointer-events:all; }
+  .pdf-modal-box {
+    background:var(--surface); border:1px solid rgba(0,229,255,0.2);
+    border-radius:20px; padding:0; max-width:440px; width:92%; overflow:hidden;
+    transform:scale(0.9) translateY(24px);
+    transition:transform 0.4s cubic-bezier(0.34,1.56,0.64,1);
+    box-shadow:0 0 60px rgba(0,229,255,0.1), 0 20px 60px rgba(0,0,0,0.7);
+  }
+  .pdf-modal-overlay.visible .pdf-modal-box { transform:scale(1) translateY(0); }
+  .pdf-modal-top {
+    background:linear-gradient(135deg,rgba(0,229,255,0.08),rgba(0,255,157,0.04));
+    border-bottom:1px solid var(--border); padding:2rem 2rem 1.5rem; text-align:center;
+  }
+  .pdf-modal-icon { font-size:2.8rem; margin-bottom:0.75rem; }
+  .pdf-modal-title { font-size:1.2rem; font-weight:800; letter-spacing:-0.02em; margin-bottom:0.3rem; }
+  .pdf-modal-sub { font-size:0.82rem; color:var(--text2); line-height:1.5; }
+  .pdf-modal-body { padding:1.5rem 2rem; }
+  .pdf-preview-info {
+    background:var(--bg3); border:1px solid var(--border); border-radius:10px;
+    padding:1rem 1.1rem; margin-bottom:1.25rem;
+  }
+  .pdf-preview-row { display:flex; justify-content:space-between; align-items:center; padding:4px 0; font-size:0.8rem; }
+  .pdf-preview-row:not(:last-child) { border-bottom:1px solid var(--border); }
+  .pdf-preview-label { color:var(--text2); font-family:var(--font-mono); font-size:0.72rem; }
+  .pdf-preview-val { color:var(--text); font-weight:600; font-size:0.8rem; max-width:200px; text-align:right; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .pdf-download-btn {
+    width:100%; padding:13px; border-radius:10px; border:none;
+    background:linear-gradient(135deg,var(--accent),var(--accent3));
+    color:#000; font-family:var(--font-display); font-weight:800; font-size:0.95rem;
+    cursor:pointer; transition:all 0.2s; display:flex; align-items:center; justify-content:center; gap:8px;
+    margin-bottom:0.75rem;
+  }
+  .pdf-download-btn:hover { opacity:0.9; transform:translateY(-1px); box-shadow:0 6px 24px rgba(0,229,255,0.3); }
+  .pdf-download-btn:disabled { opacity:0.55; cursor:not-allowed; transform:none; }
+  .pdf-cancel-btn {
+    width:100%; padding:10px; border-radius:10px; background:transparent;
+    border:1px solid var(--border2); color:var(--text2); font-family:var(--font-display);
+    font-weight:600; font-size:0.88rem; cursor:pointer; transition:all 0.2s;
+  }
+  .pdf-cancel-btn:hover { border-color:var(--accent); color:var(--accent); }
+</style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav>
+  <div class="logo">
+    <div class="logo-icon">🛡️</div>
+    Scam<span>Scan</span>
+  </div>
+  <div class="nav-links">
+    <button class="nav-btn active" onclick="showPage('home',this)">Home</button>
+    <button class="nav-btn" onclick="showPage('scanner',document.querySelectorAll('.nav-btn')[1])">Scanner</button>
+    <button class="nav-btn" onclick="showPage('reports',this)">Community Reports</button>
+  </div>
+</nav>
+
+<!-- ===== HOME PAGE ===== -->
+<div class="page active" id="page-home">
+  <div class="hero">
+    <div class="hero-glow"></div>
+    <div class="hero-badge">
+      <span class="badge-dot"></span>
+      India's #1 APK Fraud Detection Platform — Powered by AI
+    </div>
+    <h1>
+      Stop APK Scams
+      <span class="line2">Before They Strike</span>
+    </h1>
+    <p>ScamScan detects malicious Android APKs, exposes brand impersonators, traces fraud campaigns, and empowers citizens to report threats in real time.</p>
+    <div class="hero-btns">
+      <button class="btn-primary" onclick="showPage('scanner', document.querySelectorAll('.nav-btn')[1])">
+        🔍 Scan an APK
+      </button>
+      <button class="btn-outline" onclick="showPage('report', document.querySelectorAll('.nav-btn')[3])">
+        🚨 Report a Scam
+      </button>
+    </div>
+  </div>
+
+  <div style="display:flex;justify-content:center">
+    <div class="stats-row">
+      <div class="stat-item">
+        <div class="stat-num">₹1.2L Cr</div>
+        <div class="stat-label">Lost to APK fraud in India (2024)</div>
+      </div>
+      <div class="stat-item">
+        <div class="stat-num">4M+</div>
+        <div class="stat-label">Malicious APKs detected globally</div>
+      </div>
+      <div class="stat-item">
+        <div class="stat-num">1 in 6</div>
+        <div class="stat-label">Indians received fake APK link in 2024</div>
+      </div>
+      <div class="stat-item">
+        <div class="stat-num">23 sec</div>
+        <div class="stat-label">New Android malware created every 23 seconds</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- HOW IT WORKS -->
+  <div class="section">
+    <div class="section-tag">// How It Works</div>
+    <div class="section-title">Three steps to total clarity</div>
+    <div class="section-sub">Upload any APK or paste a suspicious link. ScamScan does the rest in seconds.</div>
+    <div class="steps-grid">
+      <div class="step-card">
+        <div class="step-num">STEP_01</div>
+        <div class="step-icon">📤</div>
+        <h3>Upload or Link</h3>
+        <p>Drop an APK file or paste a WhatsApp/Telegram link containing a suspicious APK download.</p>
+      </div>
+      <div class="step-card">
+        <div class="step-num">STEP_02</div>
+        <div class="step-icon">🔬</div>
+        <h3>AI Deep Analysis</h3>
+        <p>Our AI runs static analysis — permissions, certificates, brand similarity, embedded URLs, and behavioral patterns — in real time.</p>
+      </div>
+      <div class="step-card">
+        <div class="step-num">STEP_03</div>
+        <div class="step-icon">📊</div>
+        <h3>Risk Report + Action</h3>
+        <p>Get a plain-English verdict, risk score breakdown, and one-click reporting to CERT-In or cybercrime portals.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- FEATURES -->
+  <div class="section" style="padding-top:0">
+    <div class="section-tag">// Features</div>
+    <div class="section-title">Built for what exists tools miss</div>
+    <div class="section-sub">Everything current tools lack — combined in one platform.</div>
+    <div class="features-grid">
+      <div class="feature-card">
+        <div class="feature-icon fi-blue">🔗</div>
+        <div>
+          <h3>WhatsApp & Telegram Link Tracing</h3>
+          <p>Trace how an APK was distributed — through which link, domain, or group — mapping the full fraud delivery chain. No existing tool does this.</p>
+        </div>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon fi-red">🎭</div>
+        <div>
+          <h3>India-First Brand Impersonation AI</h3>
+          <p>Specifically trained to detect clones of BHIM, PhonePe, Paytm, SBI, HDFC, and 200+ Indian financial apps using icon + UI similarity models.</p>
+        </div>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon fi-green">🕸️</div>
+        <div>
+          <h3>Fraud Campaign Clustering</h3>
+          <p>Groups related malicious APKs by shared code signatures, C2 servers, and developer certificates — exposing entire fraud operations, not just individual files.</p>
+        </div>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon fi-yellow">📢</div>
+        <div>
+          <h3>Citizen Reporting Pipeline</h3>
+          <p>One-tap APK submission auto-generates a structured report for CERT-In and the National Cybercrime Reporting Portal (cybercrime.gov.in).</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- SCANNER PAGE -->
+<div class="page" id="page-scanner">
+  <div class="scanner-wrap">
+    <div class="page-title">APK &amp; URL Scanner</div>
+    <div class="page-sub">Upload an APK file or paste a suspicious download link to begin analysis</div>
+
+    <div class="upload-zone" id="dropZone">
+      <input type="file" accept=".apk" onchange="handleFile(this)">
+      <div class="upload-icon">📦</div>
+      <h3>Drop APK file here</h3>
+      <p>or click to browse — supports .apk files up to 100MB</p>
+    </div>
+
+    <div style="text-align:center;color:var(--text3);font-size:0.8rem;margin:-0.5rem 0 1rem">— or paste a link —</div>
+
+    <div class="url-row">
+      <input class="url-input" id="urlInput" placeholder="https://t.me/... or wa.me/... or any suspicious URL" />
+      <button class="scan-url-btn" onclick="startScanFromUrl()">Scan URL</button>
+    </div>
+
+    <div style="font-size:0.78rem;color:var(--text3);margin-bottom:0.75rem;font-family:var(--font-mono)">// Try a demo scan:</div>
+    <div class="sample-row">
+      <span class="sample-tag" onclick="runSampleScan('phonepe_fake','HIGH')">📱 Fake PhonePe APK</span>
+      <span class="sample-tag" onclick="runSampleScan('sbi_clone','HIGH')">🏦 SBI Clone</span>
+      <span class="sample-tag" onclick="runSampleScan('kyc_fraud','HIGH')">🪪 KYC Phishing</span>
+      <span class="sample-tag" onclick="runSampleScan('vpn_spyware','MEDIUM')">🔓 VPN Spyware</span>
+      <span class="sample-tag" onclick="runSampleScan('clean_app','LOW')">✅ Clean App (Test)</span>
+    </div>
+
+    <!-- LOADING -->
+    <div id="loading">
+      <div class="scan-anim">
+        <div class="scan-ring"></div>
+        <div class="scan-ring2"></div>
+      </div>
+      <div class="scan-label" id="scanStep">Initializing scanner...</div>
+      <div class="scan-steps">Static analysis → Brand check → URL trace → AI verdict</div>
+    </div>
+
+    <!-- RESULTS -->
+    <div id="results">
+      <div class="results-header">
+        <div>
+          <div class="results-apk-name" id="res-name">—</div>
+          <div class="results-apk-sub" id="res-hash">SHA256: — • Scanned just now</div>
+        </div>
+        <div style="margin-left:auto">
+          <div class="risk-badge-big risk-high" id="res-risk-badge">⚠ HIGH RISK</div>
+        </div>
+      </div>
+
+      <div class="score-section">
+        <div class="score-ring-wrap">
+          <div class="score-ring">
+            <svg width="110" height="110" viewBox="0 0 110 110">
+              <circle cx="55" cy="55" r="48" fill="none" stroke="#1f2d3d" stroke-width="8"/>
+              <circle id="score-circle" cx="55" cy="55" r="48" fill="none" stroke="#ff3d71" stroke-width="8"
+                stroke-dasharray="301.6" stroke-dashoffset="301.6" stroke-linecap="round"
+                style="transition:stroke-dashoffset 1.2s ease"/>
+            </svg>
+            <div class="score-ring-num">
+              <span id="score-num" style="color:var(--accent2)">0</span>
+              <span style="font-size:0.7rem;color:var(--text3)">/100</span>
+            </div>
+          </div>
+          <div class="score-sub-label">Threat Score</div>
+        </div>
+
+        <div class="breakdown-grid">
+          <div class="breakdown-card">
+            <h4>PERMISSION_RISKS</h4>
+            <div class="bar-item">
+              <div class="bar-label"><span>SMS/Call Access</span><span id="b1" style="color:var(--accent2)">—</span></div>
+              <div class="bar-track"><div class="bar-fill bar-danger" id="bf1" style="width:0%"></div></div>
+            </div>
+            <div class="bar-item">
+              <div class="bar-label"><span>Camera/Microphone</span><span id="b2" style="color:var(--warn)">—</span></div>
+              <div class="bar-track"><div class="bar-fill bar-warn" id="bf2" style="width:0%"></div></div>
+            </div>
+            <div class="bar-item">
+              <div class="bar-label"><span>Device Admin Rights</span><span id="b3" style="color:var(--accent2)">—</span></div>
+              <div class="bar-track"><div class="bar-fill bar-danger" id="bf3" style="width:0%"></div></div>
+            </div>
+            <div class="bar-item">
+              <div class="bar-label"><span>Accessibility Service</span><span id="b4" style="color:var(--accent3)">—</span></div>
+              <div class="bar-track"><div class="bar-fill bar-safe" id="bf4" style="width:0%"></div></div>
+            </div>
+          </div>
+
+          <div class="breakdown-card">
+            <h4>PERMISSIONS_DETECTED</h4>
+            <div class="perms-list" id="perms-list"></div>
+          </div>
+
+          <div class="breakdown-card">
+            <h4>BRAND_IMPERSONATION</h4>
+            <div class="bar-item">
+              <div class="bar-label"><span>Icon Similarity</span><span id="brand1">—</span></div>
+              <div class="bar-track"><div class="bar-fill" id="brf1" style="width:0%"></div></div>
+            </div>
+            <div class="bar-item">
+              <div class="bar-label"><span>App Name Match</span><span id="brand2">—</span></div>
+              <div class="bar-track"><div class="bar-fill" id="brf2" style="width:0%"></div></div>
+            </div>
+            <div class="bar-item">
+              <div class="bar-label"><span>UI Layout Clone</span><span id="brand3">—</span></div>
+              <div class="bar-track"><div class="bar-fill" id="brf3" style="width:0%"></div></div>
+            </div>
+            <div style="margin-top:8px;font-size:0.75rem;" id="brand-verdict"></div>
+          </div>
+
+          <div class="breakdown-card">
+            <h4>NETWORK_INDICATORS</h4>
+            <div id="url-list" style="display:flex;flex-direction:column;gap:5px;font-size:0.72rem;font-family:var(--font-mono);"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="ai-verdict">
+        <div class="ai-verdict-header">
+          <span style="font-size:1rem">🤖</span>
+          <span style="font-weight:700;font-size:0.9rem">AI Verdict</span>
+          <span class="ai-tag">hackHERS</span>
+        </div>
+        <div class="ai-verdict-text" id="ai-text"></div>
+      </div>
+
+      <div class="action-row">
+        <button class="action-btn danger" onclick="openReportModal()">🚨 Report Website / App</button>
+        <button class="action-btn" onclick="downloadReport()">📄 Download Report</button>
+        <button class="action-btn" onclick="resetScanner()">🔄 Scan Another</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- COMMUNITY REPORTS PAGE -->
+<div class="page" id="page-reports">
+  <div class="community-section">
+    <div class="section-header">
+      <div class="section-tag">// COMMUNITY INTELLIGENCE</div>
+      <h2>Reported by the Community</h2>
+      <p>Anonymous threat reports submitted by ScamScan users — helping protect everyone from emerging scams.</p>
+    </div>
+    <div class="reports-grid" id="communityReportsGrid">
+      <!-- Ramya's reports — loaded here -->
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════
+     RISK POPUP OVERLAY
+══════════════════════════════════════════ -->
+<div class="risk-overlay" id="riskOverlay">
+  <div class="risk-popup" id="riskPopup">
+    <div class="popup-inner">
+      <div class="popup-icon-wrap" id="popupIconWrap">
+        <span class="popup-icon" id="popupIcon">⚠️</span>
+      </div>
+      <div class="popup-title" id="popupTitle">HIGH RISK DETECTED</div>
+      <div class="popup-subtitle" id="popupSubtitle">Threat Score: 87/100</div>
+
+      <div class="popup-score-row">
+        <div>
+          <div class="popup-score" id="popupScore">87</div>
+        </div>
+        <div class="popup-score-label">
+          <strong id="popupRiskLabel">HIGH RISK</strong>
+          Threat Score
+        </div>
+      </div>
+
+      <div class="popup-divider"></div>
+
+      <!-- Why it's flagged / Precautions -->
+      <div class="popup-section-label" id="popupReasonLabel">WHY THIS IS DANGEROUS</div>
+      <div class="popup-list" id="popupReasonList"></div>
+
+      <!-- AI reasoning -->
+      <div class="popup-ai-box" id="popupAiBox">
+        <div class="popup-ai-label">// AI ANALYSIS</div>
+        <div id="popupAiText">
+          <div class="popup-ai-loading"><div class="mini-spin"></div> Analyzing with hackHERS AI...</div>
+        </div>
+      </div>
+
+      <div class="popup-btn-row">
+        <button class="popup-close-btn" id="popupCloseBtn" onclick="closePopup()">
+          Got it — Stay Safe
+        </button>
+        <button class="popup-view-btn" onclick="closePopup(); scrollToResults()">
+          View Full Report ↓
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- PDF DOWNLOAD MODAL -->
+<div class="pdf-modal-overlay" id="pdfModal">
+  <div class="pdf-modal-box">
+    <div class="pdf-modal-top">
+      <div class="pdf-modal-icon">📄</div>
+      <div class="pdf-modal-title">Download Scan Report</div>
+      <div class="pdf-modal-sub">Your full security analysis will be exported as a PDF file and saved to your device.</div>
+    </div>
+    <div class="pdf-modal-body">
+      <div class="pdf-preview-info">
+        <div class="pdf-preview-row">
+          <span class="pdf-preview-label">TARGET</span>
+          <span class="pdf-preview-val" id="pdfPreviewTarget">—</span>
+        </div>
+        <div class="pdf-preview-row">
+          <span class="pdf-preview-label">RISK LEVEL</span>
+          <span class="pdf-preview-val" id="pdfPreviewRisk">—</span>
+        </div>
+        <div class="pdf-preview-row">
+          <span class="pdf-preview-label">THREAT SCORE</span>
+          <span class="pdf-preview-val" id="pdfPreviewScore">—</span>
+        </div>
+        <div class="pdf-preview-row">
+          <span class="pdf-preview-label">FILE FORMAT</span>
+          <span class="pdf-preview-val" style="color:var(--accent)">PDF Document (.pdf)</span>
+        </div>
+      </div>
+      <button class="pdf-download-btn" id="pdfDownloadBtn" onclick="executePdfDownload()">
+        ⬇ Download PDF Report
+      </button>
+      <button class="pdf-cancel-btn" onclick="closePdfModal()">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- REPORT MODAL -->
+<div class="modal-overlay" id="reportModal">
+  <div class="modal-box">
+    <div class="modal-title">🚨 Report Suspicious Website / App</div>
+    <div class="modal-sub">Help protect others — your report is sent to the ScamScan threat database and flagged for review.</div>
+
+    <div class="modal-field">
+      <label class="modal-label">// URL OR APP NAME (pre-filled from scan)</label>
+      <input class="modal-input" id="reportTarget" type="text" placeholder="https://suspicious-site.xyz or app name" />
+    </div>
+
+    <div class="modal-field">
+      <label class="modal-label">// CATEGORY</label>
+      <select class="modal-select" id="reportCategory">
+        <option value="">Select category...</option>
+        <option value="phishing">Phishing / Fake Login Page</option>
+        <option value="fake_apk">Fake APK / Malicious App</option>
+        <option value="kyc_fraud">KYC / Aadhaar Fraud</option>
+        <option value="upi_fraud">UPI / Payment Fraud</option>
+        <option value="loan_scam">Fake Loan / Investment App</option>
+        <option value="brand_impersonation">Brand Impersonation</option>
+        <option value="other">Other</option>
+      </select>
+    </div>
+
+    <div class="modal-field">
+      <label class="modal-label">// ADDITIONAL DETAILS (optional)</label>
+      <textarea class="modal-input modal-textarea" id="reportDetails" placeholder="Describe what you encountered — any extra context helps our team review faster..."></textarea>
+    </div>
+
+    <div class="modal-field">
+      <label class="modal-label">// YOUR EMAIL (optional — for follow-up)</label>
+      <input class="modal-input" id="reportEmail" type="email" placeholder="you@example.com" />
+    </div>
+
+    <div class="modal-btn-row">
+      <button class="modal-cancel-btn" onclick="closeReportModal()">Cancel</button>
+      <button class="modal-submit-btn" id="reportSubmitBtn" onclick="submitReport()">🚨 Submit Report</button>
+    </div>
+  </div>
+</div>
+
+<!-- TOAST -->
+<div class="toast" id="toast"></div>
+
+<script>
+// ─── PAGE NAVIGATION ───
+function showPage(id, btn) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('page-' + id).classList.add('active');
+  if (btn) btn.classList.add('active');
+}
+
+// ─── SCAN SAMPLE DATA ───
+const SAMPLE_DATA = {
+  phonepe_fake: {
+    name: 'phonepe_v4.2.1_mod.apk', score: 87, risk: 'HIGH',
+    hash: 'a3f1c8d9...b2e7 • 4.2 MB',
+    perms: [{l:'READ_SMS',level:'danger'},{l:'RECEIVE_SMS',level:'danger'},{l:'SEND_SMS',level:'danger'},{l:'READ_CONTACTS',level:'warn'},{l:'RECORD_AUDIO',level:'warn'},{l:'REQUEST_INSTALL_PACKAGES',level:'danger'}],
+    bars: [92, 75, 88, 20],
+    brand: [94, 91, 87],
+    findings: ['Suspicious permissions detected', 'Possible impersonation of PhonePe', 'Embedded URLs found inside APK', 'APK requests admin privileges'],
+    urls: [{url:'phonepe-update.xyz/apk', flag:'danger'},{url:'185.220.101.47:8080', flag:'danger'},{url:'api.legitpay.in', flag:'warn'}]
+  },
+  sbi_clone: {
+    name: 'SBI_YONO_Official_v2.apk', score: 91, risk: 'HIGH',
+    hash: 'f7c2a1e3...d4b8 • 6.8 MB',
+    perms: [{l:'READ_SMS',level:'danger'},{l:'RECEIVE_SMS',level:'danger'},{l:'CAMERA',level:'warn'},{l:'READ_CONTACTS',level:'warn'},{l:'SYSTEM_ALERT_WINDOW',level:'danger'},{l:'REQUEST_INSTALL_PACKAGES',level:'danger'}],
+    bars: [95, 60, 90, 10],
+    brand: [96, 94, 89],
+    findings: ['Possible impersonation of SBI', 'Suspicious permissions detected', 'Not from official Play Store', 'Embedded phishing URLs'],
+    urls: [{url:'sbi-kycupdate.xyz', flag:'danger'},{url:'194.165.16.78', flag:'danger'},{url:'yono.sbi.co.in', flag:'warn'}]
+  },
+  kyc_fraud: {
+    name: 'https://aadhaar-kyc-update.xyz/verify', score: 82, risk: 'HIGH',
+    hash: 'URL Scan • .xyz TLD • No HTTPS',
+    perms: ['REQUEST_INSTALL_PACKAGES', 'INTERNET'],
+    bars: [70, 30, 85, 5],
+    brand: [65, 80, 55],
+    findings: ['Suspicious top-level domain (.xyz)', 'APK distribution detected', 'Telegram distribution vector', 'Not using HTTPS', 'Possible impersonation of government portal'],
+    urls: [{url:'aadhaar-kyc-update.xyz', flag:'danger'},{url:'t.me/kychelperbot', flag:'danger'},{url:'cdn.suspicioushost.net', flag:'warn'}]
+  },
+  vpn_spyware: {
+    name: 'FreeVPN_Unlimited_v3.1.apk', score: 58, risk: 'MEDIUM',
+    hash: 'b9d3f2a7...e1c4 • 12.1 MB',
+    perms: [{l:'RECORD_AUDIO',level:'warn'},{l:'READ_CONTACTS',level:'warn'},{l:'CAMERA',level:'warn'},{l:'INTERNET',level:'ok'}],
+    bars: [20, 80, 30, 60],
+    brand: [12, 18, 15],
+    findings: ['Suspicious permissions for a VPN app', 'Embedded analytics SDKs', 'Unknown developer certificate', 'Data collection concerns'],
+    urls: [{url:'collect.vpndata.io', flag:'warn'},{url:'api.frevpn.com', flag:'warn'},{url:'google-play-api.com', flag:'danger'}]
+  },
+  clean_app: {
+    name: 'my_verified_app_v1.0.apk', score: 18, risk: 'LOW',
+    hash: 'c1a2b3d4...f5e6 • 2.1 MB',
+    perms: [{l:'INTERNET',level:'ok'},{l:'VIBRATE',level:'ok'}],
+    bars: [5, 8, 3, 10],
+    brand: [4, 2, 3],
+    findings: ['No suspicious permissions found', 'No known brand impersonation', 'Clean URL profile'],
+    urls: [{url:'api.myapp.com', flag:'safe'}]
+  }
+};
+
+// ─── POPUP LOGIC ───
+let popupAiDone = false;
+
+function openPopup(data) {
+  const risk = data.risk; // 'HIGH', 'MEDIUM', 'LOW'
+  const rL = risk.toLowerCase();
+  const overlay = document.getElementById('riskOverlay');
+  const popup   = document.getElementById('riskPopup');
+  const iconWrap = document.getElementById('popupIconWrap');
+
+  overlay.className = 'risk-overlay ' + rL;
+  popup.className   = 'risk-popup ' + rL;
+  iconWrap.className = 'popup-icon-wrap ' + rL;
+
+  // Icon
+  const icons = { HIGH:'☠️', MEDIUM:'⚠️', LOW:'✅' };
+  document.getElementById('popupIcon').textContent = icons[risk];
+
+  // Title & subtitle
+  const titles = { HIGH:'⛔ HIGH RISK DETECTED', MEDIUM:'⚠️ MEDIUM RISK DETECTED', LOW:'✅ SAFE TO USE' };
+  document.getElementById('popupTitle').textContent = titles[risk];
+  document.getElementById('popupTitle').className = 'popup-title ' + rL;
+  document.getElementById('popupSubtitle').textContent = 'Threat Score: ' + data.score + '/100 — ' + data.name;
+
+  // Score
+  document.getElementById('popupScore').textContent = data.score;
+  document.getElementById('popupScore').className = 'popup-score ' + rL;
+  document.getElementById('popupRiskLabel').textContent = risk + ' RISK';
+
+  // Section label
+  const sectionLabels = { HIGH:'WHY YOU SHOULD NOT DOWNLOAD THIS', MEDIUM:'PRECAUTIONS BEFORE PROCEEDING', LOW:'WHY THIS APPEARS SAFE' };
+  document.getElementById('popupReasonLabel').textContent = sectionLabels[risk];
+  document.getElementById('popupReasonLabel').className = 'popup-section-label ' + rL;
+
+  // Reasons / Precautions
+  const reasonMap = {
+    HIGH: buildHighReasons(data),
+    MEDIUM: buildMediumReasons(data),
+    LOW: buildLowReasons(data)
+  };
+  const list = document.getElementById('popupReasonList');
+  list.innerHTML = reasonMap[risk].map(item =>
+    `<div class="popup-list-item ${rL}"><span class="popup-list-icon">${item.icon}</span><span>${item.text}</span></div>`
+  ).join('');
+
+  // AI box styling
+  document.getElementById('popupAiBox').className = 'popup-ai-box ' + rL;
+  document.getElementById('popupAiText').innerHTML = '<div class="popup-ai-loading"><div class="mini-spin"></div> Analyzing with Claude AI...</div>';
+
+  // Close button
+  const closeBtnLabels = { HIGH:'Do NOT Download — Leave Now', MEDIUM:'Understood — Proceed Carefully', LOW:'Great — Download Safely' };
+  document.getElementById('popupCloseBtn').textContent = closeBtnLabels[risk];
+  document.getElementById('popupCloseBtn').className = 'popup-close-btn ' + rL;
+
+  overlay.classList.add('visible');
+  popupAiDone = false;
+
+  // Fetch AI analysis
+  fetchAiPopupAnalysis(data, rL);
+}
+
+function buildHighReasons(data) {
+  const reasons = [];
+  const findingIcons = {
+    'Suspicious permissions detected': { icon:'📲', text:'Requests dangerous permissions (SMS, Contacts, Microphone) that allow it to steal OTPs and personal data.' },
+    'Possible impersonation': { icon:'🎭', text:'Mimics a trusted brand with near-identical icon, name, and UI — a classic phishing technique.' },
+    'Embedded URLs found inside APK': { icon:'🔗', text:'Contains hidden server addresses that send your data to attacker-controlled infrastructure.' },
+    'APK distribution detected': { icon:'💀', text:'Distributes APKs outside the Play Store — bypasses Google security checks entirely.' },
+    'Telegram distribution vector': { icon:'📢', text:'Spread through Telegram, a common channel for malware campaigns targeting Indian users.' },
+    'Not using HTTPS': { icon:'🔓', text:'No encryption on data transmission — your login credentials can be intercepted in plain text.' },
+    'Suspicious top-level domain': { icon:'🌐', text:'Uses a suspicious .xyz / .top domain typically associated with scam and phishing sites.' },
+    'Possible impersonation of government portal': { icon:'🏛️', text:'Impersonates a government service to steal Aadhaar/PAN details under false authority.' },
+  };
+  for (const f of (data.findings || [])) {
+    for (const [key, val] of Object.entries(findingIcons)) {
+      if (f.includes(key.split(' ')[0]) || f.includes(key)) {
+        reasons.push(val);
+        break;
+      }
+    }
+    if (reasons.length >= 4) break;
+  }
+  if (reasons.length < 2) {
+    reasons.push({ icon:'⚡', text:'Multiple threat indicators detected that are consistent with known Indian UPI scam patterns.' });
+    reasons.push({ icon:'🚫', text:'This APK/URL has characteristics matching active fraud campaigns reported to CERT-In.' });
+  }
+  return reasons;
+}
+
+function buildMediumReasons(data) {
+  return [
+    { icon:'🔍', text:'Verify the developer identity on the official app store before installing.' },
+    { icon:'🛑', text:'Do not grant permissions like SMS or Contacts unless absolutely necessary.' },
+    { icon:'📶', text:'Use the app only on a trusted Wi-Fi network, not public hotspots.' },
+    { icon:'🔄', text:'Check for user reviews and reports on cybercrime.gov.in before proceeding.' },
+    { icon:'💾', text:'Keep a backup of important data before installing any unverified application.' }
+  ];
+}
+
+function buildLowReasons(data) {
+  return [
+    { icon:'✅', text:'No dangerous permissions detected — the app does not request access to SMS, Contacts, or Microphone.' },
+    { icon:'🏷️', text:'No brand impersonation patterns found — icon, name, and UI do not clone any known financial app.' },
+    { icon:'🌐', text:'Network indicators appear clean with no known malicious infrastructure detected.' },
+    { icon:'🔒', text:'Standard permission footprint consistent with a legitimate utility application.' }
+  ];
+}
+
+async function fetchAiPopupAnalysis(data, riskLevel) {
+  const prompt = `You are a cybersecurity analyst specializing in mobile app fraud detection in India.
+
+Scan result:
+- App/URL: ${data.name}
+- Threat Score: ${data.score}/100
+- Risk Level: ${data.risk}
+- Findings: ${(data.findings || []).join(', ')}
+- Permissions detected: ${Array.isArray(data.perms) ? (data.perms[0]?.l ? data.perms.map(p=>p.l).join(', ') : data.perms.join(', ')) : ''}
+
+Write a 2-sentence expert assessment. Be direct, specific, and explain the real-world consequences for an Indian user (UPI fraud, OTP theft, bank loss, identity theft). No bullet points. Use plain language a non-technical person can understand. Do not start with "I" or "This app". Start directly with the threat assessment.`;
+
+  try {
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method:'POST',
+      headers:{ 'Content-Type':'application/json' },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 1000,
+        messages: [{ role:'user', content: prompt }]
+      })
+    });
+    const json = await res.json();
+    const text = json.content?.map(b => b.type === 'text' ? b.text : '').join('') || 'Analysis unavailable.';
+    document.getElementById('popupAiText').textContent = text;
+    popupAiDone = true;
+  } catch(e) {
+    document.getElementById('popupAiText').textContent = 'AI analysis unavailable — refer to the findings below.';
+  }
+}
+
+function closePopup() {
+  document.getElementById('riskOverlay').classList.remove('visible');
+}
+
+function scrollToResults() {
+  document.getElementById('results').scrollIntoView({ behavior:'smooth', block:'start' });
+}
+
+// Close on overlay click
+document.getElementById('riskOverlay').addEventListener('click', function(e) {
+  if (e.target === this) closePopup();
+});
+
+// ─── SCANNER LOGIC ───
+function handleFile(input) {
+  if (!input.files[0]) return;
+  const f = input.files[0];
+  runAnalysis({ name: f.name, score: null, risk: null, isFile: true, file: f });
+}
+
+function startScanFromUrl() {
+  const url = document.getElementById('urlInput').value.trim();
+  if (!url) return;
+  runAnalysis({ name: url, score: null, risk: null, isUrl: true });
+}
+
+function runSampleScan(key, riskHint) {
+  const data = SAMPLE_DATA[key];
+  if (!data) return;
+  showPage('scanner', document.querySelectorAll('.nav-btn')[1]);
+  startScanAnimation(data.name, () => {
+    showResults(data);
+    openPopup(data);
+  });
+}
+
+function runAnalysis(target) {
+  startScanAnimation(target.name, async () => {
+    // For demo: generate a plausible result from the name/url
+    const isHighRisk = /mod|fake|clone|kyc|phish|xyz|top|click|sbi|phonepe|paytm|bhim/i.test(target.name);
+    const isMedium = /free|vpn|reward|bonus|update|lucky|win/i.test(target.name);
+    let score, risk;
+    if (isHighRisk) { score = 75 + Math.floor(Math.random()*20); risk = 'HIGH'; }
+    else if (isMedium) { score = 40 + Math.floor(Math.random()*30); risk = 'MEDIUM'; }
+    else { score = 10 + Math.floor(Math.random()*25); risk = 'LOW'; }
+
+    const data = {
+      name: target.name,
+      score, risk,
+      hash: 'SHA256: ' + randomHex(8) + '... • Scanned just now',
+      perms: score > 70 ? [
+        {l:'READ_SMS',level:'danger'},{l:'RECEIVE_SMS',level:'danger'},{l:'READ_CONTACTS',level:'warn'}
+      ] : score > 40 ? [
+        {l:'CAMERA',level:'warn'},{l:'INTERNET',level:'ok'}
+      ] : [{l:'INTERNET',level:'ok'}],
+      bars: score > 70 ? [85,70,80,15] : score > 40 ? [30,60,20,40] : [5,8,3,10],
+      brand: score > 70 ? [80,85,75] : score > 40 ? [20,30,15] : [3,5,2],
+      findings: score > 70 ? ['Suspicious permissions detected','Possible brand impersonation detected','Embedded URLs found inside APK'] :
+                score > 40 ? ['Unknown developer certificate','Suspicious analytics SDK','Data collection concerns'] :
+                ['No dangerous permissions detected','Clean network profile','No brand impersonation found'],
+      urls: [{url: target.name.substring(0,40), flag: score > 70 ? 'danger' : score > 40 ? 'warn' : 'safe'}]
+    };
+
+    showResults(data);
+    openPopup(data);
+  });
+}
+
+function startScanAnimation(name, callback) {
+  document.getElementById('results').style.display = 'none';
+  document.getElementById('loading').style.display = 'block';
+  const steps = ['Initializing scanner...','Parsing APK structure...','Analyzing permissions...','Checking brand signatures...','Tracing network indicators...','Running AI verdict...'];
+  let i = 0;
+  const el = document.getElementById('scanStep');
+  el.textContent = steps[0];
+  const iv = setInterval(() => {
+    i++;
+    if (i < steps.length) el.textContent = steps[i];
+    else { clearInterval(iv); document.getElementById('loading').style.display = 'none'; callback(); }
+  }, 420);
+}
+
+function showResults(data) {
+  _lastScanData = data;
+  document.getElementById('results').style.display = 'block';
+  document.getElementById('res-name').textContent = data.name;
+  document.getElementById('res-hash').textContent = data.hash || 'Scanned just now';
+
+  // Risk badge
+  const badge = document.getElementById('res-risk-badge');
+  const badgeMap = { HIGH:['⚠ HIGH RISK','risk-high'], MEDIUM:['⚡ MEDIUM RISK','risk-medium'], LOW:['✅ LOW RISK','risk-low'] };
+  badge.textContent = badgeMap[data.risk][0];
+  badge.className = 'risk-badge-big ' + badgeMap[data.risk][1];
+
+  // Score ring
+  const scoreEl = document.getElementById('score-num');
+  scoreEl.style.color = data.risk==='HIGH'?'var(--accent2)':data.risk==='MEDIUM'?'var(--warn)':'var(--accent3)';
+  animateNum(scoreEl, data.score);
+  const circle = document.getElementById('score-circle');
+  const circ = 2 * Math.PI * 48;
+  circle.style.stroke = data.risk==='HIGH'?'#ff3d71':data.risk==='MEDIUM'?'#ffaa00':'#00ff9d';
+  setTimeout(() => { circle.style.strokeDashoffset = circ - (data.score/100)*circ; }, 300);
+
+  // Bars
+  const barIds = ['bf1','bf2','bf3','bf4'];
+  const barLabelIds = ['b1','b2','b3','b4'];
+  const barColors = [['bar-danger','var(--accent2)'],['bar-warn','var(--warn)'],['bar-danger','var(--accent2)'],['bar-safe','var(--accent3)']];
+  (data.bars||[0,0,0,0]).forEach((v,i) => {
+    const el = document.getElementById(barIds[i]);
+    el.className = 'bar-fill ' + barColors[i][0];
+    setTimeout(() => el.style.width = v+'%', 300);
+    const lbl = document.getElementById(barLabelIds[i]);
+    lbl.textContent = v+'%';
+    lbl.style.color = barColors[i][1];
+  });
+
+  // Permissions
+  const permList = document.getElementById('perms-list');
+  const perms = data.perms || [];
+  permList.innerHTML = perms.length ? perms.map(p => {
+    const level = p.level || 'ok';
+    return `<div class="perm-item"><div class="perm-dot perm-${level}"></div>${p.l || p}</div>`;
+  }).join('') : '<div style="color:var(--text3);font-size:0.75rem">None detected</div>';
+
+  // Brand bars
+  const brand = data.brand || [0,0,0];
+  ['brf1','brf2','brf3'].forEach((id,i) => {
+    const el = document.getElementById(id);
+    el.className = 'bar-fill ' + (brand[i]>70?'bar-danger':brand[i]>30?'bar-warn':'bar-safe');
+    setTimeout(() => el.style.width = brand[i]+'%', 400);
+  });
+  ['brand1','brand2','brand3'].forEach((id,i) => {
+    const el = document.getElementById(id);
+    el.textContent = brand[i]+'%';
+    el.style.color = brand[i]>70?'var(--accent2)':brand[i]>30?'var(--warn)':'var(--accent3)';
+  });
+
+  // URLs
+  const urlList = document.getElementById('url-list');
+  urlList.innerHTML = (data.urls||[]).map(u => {
+    const col = u.flag==='danger'?'var(--accent2)':u.flag==='warn'?'var(--warn)':'var(--accent3)';
+    const icon = u.flag==='danger'?'🔴':u.flag==='warn'?'🟡':'🟢';
+    return `<div style="display:flex;align-items:center;gap:6px;padding:4px 0;border-bottom:1px solid var(--border)">${icon} <span style="color:${col}">${u.url}</span></div>`;
+  }).join('');
+
+  // AI verdict (fetch separately for results section too)
+  fetchResultsVerdictStream(data);
+}
+
+async function fetchResultsVerdictStream(data) {
+  const el = document.getElementById('ai-text');
+  el.innerHTML = '<div style="color:var(--text3);font-family:var(--font-mono);font-size:0.8rem;display:flex;align-items:center;gap:8px"><div class="mini-spin" style="width:14px;height:14px;border-radius:50%;border:2px solid var(--border);border-top-color:var(--accent);animation:spin 0.8s linear infinite;"></div> Claude is analyzing...</div>';
+
+  const prompt = `You are ScamScan's AI engine. Analyze this ${data.risk} risk scan:
+App/URL: ${data.name}
+Score: ${data.score}/100
+Findings: ${(data.findings||[]).join('; ')}
+
+Write a 3-sentence expert security verdict. Be specific about: (1) what makes this dangerous or safe, (2) what an attacker could steal if the user proceeds (for risky ones), or why it's safe (for low risk). (3) One actionable recommendation. Plain language for Indian users. No bullet points. No markdown. Direct and authoritative.`;
+
+  try {
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({
+        model:'claude-sonnet-4-20250514',
+        max_tokens:1000,
+        messages:[{role:'user',content:prompt}]
+      })
+    });
+    const json = await res.json();
+    const text = json.content?.map(b=>b.type==='text'?b.text:'').join('') || data.findings.join('<br>');
+    typeWriter(el, text);
+  } catch(e) {
+    el.innerHTML = data.findings.map(f=>`<strong>${f}</strong>`).join('<br>');
+  }
+}
+
+function typeWriter(el, text) {
+  el.innerHTML = '';
+  let i = 0;
+  const iv = setInterval(() => {
+    el.innerHTML = text.substring(0, i) + '<span class="typing-cursor"></span>';
+    i += 3;
+    if (i >= text.length) { el.innerHTML = text; clearInterval(iv); }
+  }, 18);
+}
+
+function animateNum(el, target) {
+  let cur = 0;
+  const iv = setInterval(() => {
+    cur += Math.ceil(target/40);
+    if (cur >= target) { cur = target; clearInterval(iv); }
+    el.textContent = cur;
+  }, 30);
+}
+
+function randomHex(n) {
+  return [...Array(n)].map(()=>Math.floor(Math.random()*16).toString(16)).join('');
+}
+
+function resetScanner() {
+  document.getElementById('results').style.display = 'none';
+  document.getElementById('urlInput').value = '';
+  window.scrollTo(0,0);
+}
+
+// ─── GLOBAL SCAN STATE ───
+let _lastScanData = null;
+
+// ─── TOAST ───
+function showToast(msg, type='success') {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'toast ' + type + ' show';
+  setTimeout(() => t.classList.remove('show'), 3500);
+}
+
+// ─── REPORT MODAL ───
+function openReportModal() {
+  const modal = document.getElementById('reportModal');
+  if (_lastScanData) {
+    document.getElementById('reportTarget').value = _lastScanData.name || '';
+  }
+  modal.classList.add('visible');
+}
+
+function closeReportModal() {
+  document.getElementById('reportModal').classList.remove('visible');
+}
+
+document.getElementById('reportModal').addEventListener('click', function(e) {
+  if (e.target === this) closeReportModal();
+});
+
+async function submitReport() {
+  const target   = document.getElementById('reportTarget').value.trim();
+  const category = document.getElementById('reportCategory').value;
+  const details  = document.getElementById('reportDetails').value.trim();
+  const email    = document.getElementById('reportEmail').value.trim();
+
+  if (!target) { showToast('⚠ Please enter a URL or app name.', 'error'); return; }
+  if (!category) { showToast('⚠ Please select a category.', 'error'); return; }
+
+  const btn = document.getElementById('reportSubmitBtn');
+  btn.disabled = true;
+  btn.textContent = 'Submitting...';
+
+  const payload = {
+    target,
+    category,
+    details: details || null,
+    email: email || null,
+    scanScore: _lastScanData ? _lastScanData.score : null,
+    scanRisk:  _lastScanData ? _lastScanData.risk  : null,
+    findings:  _lastScanData ? (_lastScanData.findings || []) : [],
+    reportedAt: new Date().toISOString(),
+    userAgent: navigator.userAgent
+  };
+
+  try {
+    const waitForFirebase = () => new Promise(resolve => {
+      if (window._firebaseReady) return resolve();
+      document.addEventListener('firebaseReady', resolve, { once: true });
+    });
+    await waitForFirebase();
+
+    const db     = window._firebaseDB;
+    const dbRef  = window._firebaseRef;
+    const push   = window._firebasePush;
+
+    await push(dbRef(db, 'reports'), payload);
+
+    closeReportModal();
+    showToast('✅ Report submitted — thank you for helping keep India safe!', 'success');
+    document.getElementById('reportTarget').value   = '';
+    document.getElementById('reportCategory').value = '';
+    document.getElementById('reportDetails').value  = '';
+    document.getElementById('reportEmail').value    = '';
+  } catch(err) {
+    console.error('Firebase report error:', err);
+    showToast('❌ Failed to submit. Please try again.', 'error');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '🚨 Submit Report';
+  }
+}
+
+// ─── PDF DOWNLOAD MODAL ───
+function downloadReport() {
+  if (!_lastScanData) { showToast('⚠ Run a scan first to download the report.', 'error'); return; }
+  const d = _lastScanData;
+  document.getElementById('pdfPreviewTarget').textContent = d.name || '—';
+  document.getElementById('pdfPreviewRisk').textContent   = (d.risk || '—') + ' RISK';
+  document.getElementById('pdfPreviewScore').textContent  = (d.score || '0') + ' / 100';
+  document.getElementById('pdfModal').classList.add('visible');
+}
+
+function closePdfModal() {
+  document.getElementById('pdfModal').classList.remove('visible');
+}
+
+document.getElementById('pdfModal').addEventListener('click', function(e) {
+  if (e.target === this) closePdfModal();
+});
+
+async function executePdfDownload() {
+  const d = _lastScanData;
+  if (!d) return;
+
+  const btn = document.getElementById('pdfDownloadBtn');
+  btn.disabled = true;
+  btn.innerHTML = '<div class="mini-spin" style="border-top-color:#000;border-color:rgba(0,0,0,0.2)"></div> Generating PDF...';
+
+  // Save to Firebase (non-blocking)
+  try {
+    const waitForFirebase = () => new Promise(resolve => {
+      if (window._firebaseReady) return resolve();
+      document.addEventListener('firebaseReady', resolve, { once: true });
+    });
+    await waitForFirebase();
+    const payload = {
+      target: d.name, score: d.score, risk: d.risk,
+      findings: d.findings || [],
+      permissions: Array.isArray(d.perms) ? (d.perms[0]?.l ? d.perms.map(p=>p.l) : d.perms) : [],
+      urls: (d.urls||[]).map(u=>u.url),
+      scannedAt: new Date().toISOString()
+    };
+    await window._firebasePush(window._firebaseRef(window._firebaseDB, 'scan_reports'), payload);
+  } catch(e) { /* non-blocking */ }
+
+  // Generate PDF using jsPDF
+  try {
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF({ orientation:'portrait', unit:'mm', format:'a4' });
+    const W = 210, pageH = 297;
+    const margin = 18;
+    let y = 0;
+
+    const riskColor =
+      d.risk === 'HIGH'   ? [255, 61, 113] :
+      d.risk === 'MEDIUM' ? [255, 170, 0]  : [0, 220, 130];
+    const riskBg =
+      d.risk === 'HIGH'   ? [40, 8, 16]   :
+      d.risk === 'MEDIUM' ? [38, 28, 6]   : [6, 30, 20];
+
+    // ── Header band
+    doc.setFillColor(...riskBg);
+    doc.rect(0, 0, W, 42, 'F');
+    doc.setFillColor(...riskColor);
+    doc.rect(0, 0, W, 3, 'F');
+
+    // Logo shield text
+    doc.setFont('helvetica','bold');
+    doc.setFontSize(18);
+    doc.setTextColor(255,255,255);
+    doc.text('ScamScan', margin, 18);
+    doc.setFont('helvetica','normal');
+    doc.setFontSize(8);
+    doc.setTextColor(136,153,170);
+    doc.text('AI-Powered Fraud Detection  |  Security Report', margin, 25);
+
+    // Risk pill top right
+    const pillW = 38, pillH = 8, pillX = W - margin - pillW, pillY = 12;
+    doc.setFillColor(...riskColor);
+    doc.roundedRect(pillX, pillY, pillW, pillH, 3, 3, 'F');
+    doc.setFont('helvetica','bold');
+    doc.setFontSize(7.5);
+    doc.setTextColor(d.risk === 'MEDIUM' ? 0 : 255, d.risk === 'MEDIUM' ? 0 : 255, d.risk === 'MEDIUM' ? 0 : 255);
+    const pillLabel = d.risk === 'HIGH' ? '⚠ HIGH RISK' : d.risk === 'MEDIUM' ? '⚡ MEDIUM RISK' : '✅ LOW RISK';
+    doc.text(pillLabel, pillX + pillW/2, pillY + 5.3, { align:'center' });
+
+    // Generated date
+    const now = new Date().toLocaleString('en-IN',{timeZone:'Asia/Kolkata'});
+    doc.setFont('helvetica','normal');
+    doc.setFontSize(7);
+    doc.setTextColor(74,90,106);
+    doc.text('Generated: ' + now + ' IST', margin, 37);
+
+    y = 55;
+
+    // ── Target card
+    doc.setFillColor(20, 28, 36);
+    doc.roundedRect(margin, y, W - 2*margin, 22, 4, 4, 'F');
+    doc.setDrawColor(31,45,61);
+    doc.roundedRect(margin, y, W - 2*margin, 22, 4, 4, 'S');
+    doc.setFont('helvetica','bold');
+    doc.setFontSize(7);
+    doc.setTextColor(136,153,170);
+    doc.text('TARGET', margin+5, y+7);
+    doc.setFont('helvetica','bold');
+    doc.setFontSize(9.5);
+    doc.setTextColor(232,240,248);
+    const targetText = doc.splitTextToSize(d.name || '—', W - 2*margin - 10);
+    doc.text(targetText[0], margin+5, y+15);
+    doc.setFont('helvetica','normal');
+    doc.setFontSize(7);
+    doc.setTextColor(74,90,106);
+    doc.text(d.hash || 'Scanned just now', margin+5, y+20);
+    y += 30;
+
+    // ── Score + Risk row
+    // Score circle simulation (filled rect)
+    const scoreBoxW = 50, scoreBoxH = 38;
+    doc.setFillColor(20,28,36);
+    doc.roundedRect(margin, y, scoreBoxW, scoreBoxH, 4, 4, 'F');
+    doc.setDrawColor(...riskColor);
+    doc.setLineWidth(0.8);
+    doc.roundedRect(margin, y, scoreBoxW, scoreBoxH, 4, 4, 'S');
+    doc.setFont('helvetica','bold');
+    doc.setFontSize(24);
+    doc.setTextColor(...riskColor);
+    doc.text(String(d.score), margin + scoreBoxW/2, y + 22, { align:'center' });
+    doc.setFontSize(7.5);
+    doc.setTextColor(136,153,170);
+    doc.text('/100 Threat Score', margin + scoreBoxW/2, y + 32, { align:'center' });
+
+    // Findings column
+    const findingsX = margin + scoreBoxW + 8;
+    const findingsW = W - margin - findingsX;
+    doc.setFillColor(20,28,36);
+    doc.roundedRect(findingsX, y, findingsW, scoreBoxH, 4, 4, 'F');
+    doc.setDrawColor(31,45,61);
+    doc.setLineWidth(0.3);
+    doc.roundedRect(findingsX, y, findingsW, scoreBoxH, 4, 4, 'S');
+    doc.setFont('helvetica','bold');
+    doc.setFontSize(7);
+    doc.setTextColor(136,153,170);
+    doc.text('KEY FINDINGS', findingsX+5, y+7);
+    doc.setFont('helvetica','normal');
+    doc.setFontSize(8);
+    const findings = d.findings || ['No findings available'];
+    let fy = y + 13;
+    findings.slice(0,4).forEach(f => {
+      if (fy > y + scoreBoxH - 4) return;
+      const fColor = f.toLowerCase().includes('no ') || f.toLowerCase().includes('clean') ? [0,200,120] :
+                     f.toLowerCase().includes('suspicious') || f.toLowerCase().includes('danger') ? [255,61,113] : [255,170,0];
+      doc.setFillColor(...fColor);
+      doc.circle(findingsX+8, fy-1.5, 1.2, 'F');
+      doc.setTextColor(200,215,230);
+      const wrapped = doc.splitTextToSize(f, findingsW - 18);
+      doc.text(wrapped[0], findingsX+12, fy);
+      fy += 7;
+    });
+    y += scoreBoxH + 10;
+
+    // ── Permissions section
+    const perms = Array.isArray(d.perms) ? (d.perms[0]?.l ? d.perms.map(p=>p.l) : d.perms) : [];
+    if (perms.length > 0) {
+      doc.setFont('helvetica','bold');
+      doc.setFontSize(7.5);
+      doc.setTextColor(136,153,170);
+      doc.text('PERMISSIONS DETECTED', margin, y);
+      y += 5;
+      const permColors = { danger:[255,61,113], warn:[255,170,0], ok:[0,200,120] };
+      let px = margin;
+      (Array.isArray(d.perms) && d.perms[0]?.l ? d.perms : d.perms.map(p=>({l:String(p),level:'ok'}))).forEach(p => {
+        const label = p.l || String(p);
+        const lvl = p.level || 'ok';
+        const col = permColors[lvl] || permColors.ok;
+        const tw = doc.getTextWidth(label) + 8;
+        if (px + tw > W - margin) { px = margin; y += 9; }
+        doc.setFillColor(col[0]*0.15, col[1]*0.15, col[2]*0.15);
+        doc.roundedRect(px, y-4, tw, 7, 2, 2, 'F');
+        doc.setDrawColor(...col);
+        doc.setLineWidth(0.3);
+        doc.roundedRect(px, y-4, tw, 7, 2, 2, 'S');
+        doc.setFont('helvetica','bold');
+        doc.setFontSize(6.5);
+        doc.setTextColor(...col);
+        doc.text(label, px+4, y+0.8);
+        px += tw + 4;
+      });
+      y += 14;
+    }
+
+    // ── Network indicators
+    if ((d.urls||[]).length > 0) {
+      doc.setFont('helvetica','bold');
+      doc.setFontSize(7.5);
+      doc.setTextColor(136,153,170);
+      doc.text('NETWORK INDICATORS', margin, y);
+      y += 5;
+      d.urls.forEach(u => {
+        const col = u.flag==='danger'?[255,61,113]:u.flag==='warn'?[255,170,0]:[0,200,120];
+        const icon = u.flag==='danger'?'!':u.flag==='warn'?'~':'+';
+        doc.setFillColor(...col.map(c=>Math.round(c*0.15)));
+        doc.roundedRect(margin, y-3.5, W-2*margin, 8, 2, 2, 'F');
+        doc.setDrawColor(...col.map(c=>Math.round(c*0.5)));
+        doc.setLineWidth(0.3);
+        doc.roundedRect(margin, y-3.5, W-2*margin, 8, 2, 2, 'S');
+        doc.setFont('helvetica','bold');
+        doc.setFontSize(7);
+        doc.setTextColor(...col);
+        doc.text('['+icon+']', margin+3, y+1);
+        doc.setFont('helvetica','normal');
+        doc.setTextColor(200,215,230);
+        doc.text(u.url, margin+14, y+1);
+        y += 11;
+      });
+      y += 4;
+    }
+
+    // ── AI Verdict
+    const aiText = document.getElementById('ai-text')?.innerText || '';
+    if (aiText && aiText.length > 10) {
+      if (y > pageH - 50) { doc.addPage(); y = 20; }
+      doc.setFillColor(14,22,32);
+      const aiBoxH = Math.min(Math.ceil(aiText.length / 80) * 6 + 20, 55);
+      doc.roundedRect(margin, y, W-2*margin, aiBoxH, 4, 4, 'F');
+      doc.setDrawColor(0,120,150);
+      doc.setLineWidth(0.4);
+      doc.roundedRect(margin, y, W-2*margin, aiBoxH, 4, 4, 'S');
+      doc.setFont('helvetica','bold');
+      doc.setFontSize(7);
+      doc.setTextColor(0,200,220);
+      doc.text('// AI VERDICT — HackHERS', margin+5, y+7);
+      doc.setFont('helvetica','normal');
+      doc.setFontSize(7.5);
+      doc.setTextColor(160,190,210);
+      const aiLines = doc.splitTextToSize(aiText, W-2*margin-10);
+      aiLines.slice(0, Math.floor((aiBoxH-12)/5)).forEach((line, i) => {
+        doc.text(line, margin+5, y+13+(i*5));
+      });
+      y += aiBoxH + 8;
+    }
+
+    // ── Footer
+    const footerY = pageH - 14;
+    doc.setFillColor(12,16,22);
+    doc.rect(0, footerY-5, W, 20, 'F');
+    doc.setFont('helvetica','normal');
+    doc.setFontSize(6.5);
+    doc.setTextColor(74,90,106);
+    const reportId = 'SS-' + Date.now();
+    doc.text('Report ID: ' + reportId + '  |  ScamScan v2.0  |  Powered by HackHERS AI', margin, footerY+2);
+    doc.text('For informational purposes only. Report at cybercrime.gov.in', margin, footerY+7);
+    doc.setTextColor(0,180,200);
+    doc.text('scamscan.in', W-margin, footerY+4, { align:'right' });
+
+    // Save
+    const fileName = 'ScamScan_' + (d.name||'report').replace(/[^a-zA-Z0-9]/g,'_').substring(0,35) + '_' + reportId + '.pdf';
+    doc.save(fileName);
+
+    closePdfModal();
+    showToast('✅ PDF downloaded to your device!', 'success');
+  } catch(err) {
+    console.error('PDF error:', err);
+    showToast('❌ PDF generation failed. Try again.', 'error');
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '⬇ Download PDF Report';
+  }
+}
+
+// ─── COMMUNITY REPORTS (Ramya's anonymous reports) ───
+const RAMYA_REPORTS = [
+  {
+    target: 'sbi-yono-update.xyz/apk-download',
+    category: 'Fake APK / Malicious App',
+    categoryIcon: '📦',
+    risk: 'HIGH',
+    score: 91,
+    finding: 'Impersonates SBI YONO app with near-identical icon. Requests READ_SMS and RECEIVE_SMS — harvests OTPs silently.',
+    date: 'Apr 24, 2026'
+  },
+  {
+    target: 'aadhaar-kyc-verify.top/update',
+    category: 'KYC / Aadhaar Fraud',
+    categoryIcon: '🪪',
+    risk: 'HIGH',
+    score: 88,
+    finding: 'Fake KYC portal mimicking UIDAI. Collects Aadhaar number, PAN, and bank details under false government authority.',
+    date: 'Apr 21, 2026'
+  },
+  {
+    target: 'paytm-cashback-offer.click',
+    category: 'Phishing / Fake Login Page',
+    categoryIcon: '🎣',
+    risk: 'HIGH',
+    score: 84,
+    finding: 'Cloned Paytm interface offering fake ₹500 cashback. Phishing for UPI PIN and wallet credentials.',
+    date: 'Apr 18, 2026'
+  },
+  {
+    target: 'FreeRecharge_Lucky_v2.apk',
+    category: 'UPI / Payment Fraud',
+    categoryIcon: '💸',
+    risk: 'MEDIUM',
+    score: 62,
+    finding: 'Claims to offer free mobile recharge via a lucky draw. Contains hidden ad SDK that intercepts UPI intents.',
+    date: 'Apr 15, 2026'
+  },
+  {
+    target: 'loan-approval-fast.xyz/apply',
+    category: 'Fake Loan / Investment App',
+    categoryIcon: '🏦',
+    risk: 'HIGH',
+    score: 79,
+    finding: 'Instant loan scam site. Collects Aadhaar and selfie for "verification", then vanishes with data and processing fee.',
+    date: 'Apr 12, 2026'
+  },
+  {
+    target: 'BHIM_Official_v5.3_mod.apk',
+    category: 'Brand Impersonation',
+    categoryIcon: '🎭',
+    risk: 'HIGH',
+    score: 93,
+    finding: 'Highly convincing BHIM clone with 93% UI similarity. Intercepts UPI transactions and redirects funds.',
+    date: 'Apr 8, 2026'
+  }
+];
+
+const CATEGORY_LABELS = {
+  phishing: { label: 'Phishing / Fake Login Page', icon: '🎣' },
+  fake_apk: { label: 'Fake APK / Malicious App', icon: '📦' },
+  kyc_fraud: { label: 'KYC / Aadhaar Fraud', icon: '🪪' },
+  upi_fraud: { label: 'UPI / Payment Fraud', icon: '💸' },
+  loan_scam: { label: 'Fake Loan / Investment App', icon: '🏦' },
+  brand_impersonation: { label: 'Brand Impersonation', icon: '🎭' },
+  other: { label: 'Other', icon: '⚠️' }
+};
+
+function buildReportCardHtml(r) {
+  const risk = (r.risk || r.scanRisk || 'MEDIUM').toUpperCase();
+  const rl = risk.toLowerCase();
+  const score = r.score ?? r.scanScore ?? '—';
+  const target = r.target || '—';
+  const catKey = r.category || 'other';
+  const catMeta = CATEGORY_LABELS[catKey] || { label: catKey, icon: '⚠️' };
+  const finding = r.finding || r.details || (r.findings && r.findings.length ? r.findings[0] : 'Reported by community user.');
+  const date = r.date || (r.reportedAt ? new Date(r.reportedAt).toLocaleDateString('en-IN', { day:'numeric', month:'short', year:'numeric' }) : '—');
+  return `
+  <div class="report-card ${rl}">
+    <div class="report-card-header">
+      <span class="report-risk-pill ${rl}">${risk === 'HIGH' ? '⚠ HIGH' : risk === 'MEDIUM' ? '⚡ MEDIUM' : '✅ LOW'}</span>
+      <span class="report-score ${rl}">${score !== '—' ? score : '—'}<span style="font-size:0.65rem;opacity:0.6">${score !== '—' ? '/100' : ''}</span></span>
+    </div>
+    <div class="report-target">${target}</div>
+    <div class="report-category">${catMeta.icon} <span>${catMeta.label}</span></div>
+    <div class="report-finding">${finding}</div>
+    <div class="report-footer">
+      <div class="report-anon">
+        <div class="report-anon-dot"></div>
+        Anonymous User
+      </div>
+      <div class="report-date">${date}</div>
+    </div>
+  </div>`;
+}
+
+function renderCommunityReports(liveReports) {
+  const grid = document.getElementById('communityReportsGrid');
+  if (!grid) return;
+  // Merge: live Firebase reports first (newest first), then static fallback reports
+  const allReports = [...(liveReports || []), ...RAMYA_REPORTS];
+  if (allReports.length === 0) {
+    grid.innerHTML = '<div style="color:var(--text3);text-align:center;padding:2rem;font-family:var(--font-mono);font-size:0.85rem">No reports yet. Be the first to report a scam.</div>';
+    return;
+  }
+  grid.innerHTML = allReports.map(r => buildReportCardHtml(r)).join('');
+}
+
+function loadCommunityReportsFromFirebase() {
+  const grid = document.getElementById('communityReportsGrid');
+  if (!grid) return;
+
+  const waitForFirebase = () => new Promise(resolve => {
+    if (window._firebaseReady) return resolve();
+    document.addEventListener('firebaseReady', resolve, { once: true });
+  });
+
+  waitForFirebase().then(() => {
+    try {
+      const reportsRef = window._firebaseRef(window._firebaseDB, 'reports');
+      window._firebaseOnValue(reportsRef, (snapshot) => {
+        const data = snapshot.val();
+        const liveReports = [];
+        if (data) {
+          // Convert Firebase object to array, newest first
+          Object.values(data).reverse().forEach(entry => {
+            liveReports.push(entry);
+          });
+        }
+        renderCommunityReports(liveReports);
+      }, (err) => {
+        console.warn('Firebase reports fetch error:', err);
+        renderCommunityReports([]); // Fall back to static
+      });
+    } catch(e) {
+      console.warn('Firebase reports init error:', e);
+      renderCommunityReports([]);
+    }
+  });
+}
+
+// Render static immediately, then replace with live data once Firebase loads
+document.addEventListener('DOMContentLoaded', () => {
+  renderCommunityReports([]); // Show static RAMYA_REPORTS immediately
+  loadCommunityReportsFromFirebase(); // Then hydrate with live Firebase reports
+});
+// Also fire immediately in case DOM is already ready
+renderCommunityReports([]);
+loadCommunityReportsFromFirebase();
+</script>
+</body>
+</html>
